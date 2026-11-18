@@ -29,7 +29,10 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", app=settings.APP_NAME, version=settings.APP_VERSION)
-    await init_db()
+    # Serverless instances should not create or migrate schema on cold start.
+    # Apply database migrations as a separate deployment step in production.
+    if not settings.is_production:
+        await init_db()
     yield
     logger.info("shutdown")
 

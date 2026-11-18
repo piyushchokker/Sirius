@@ -1,11 +1,17 @@
 import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { AGENT_MODELS, DEFAULT_OPENAI_MODEL, OPENAI_FAST_SERVICE_TIER } from "@/lib/ai-models";
+import type { ChatCompletion } from "openai/resources/chat/completions";
 
 const schema = z.object({
   input: z.string().min(1).max(8000),
   tools: z.array(z.string()).default([]),
-  model: z.string().default("gpt-4o-mini"),
+  model: z.string().trim().min(1).max(100)
+    .default(DEFAULT_OPENAI_MODEL)
+    .refine((model) => AGENT_MODELS.some((candidate) => candidate.value === model), "Unsupported agent model"),
+  systemPrompt: z.string().max(4000).optional(),
+  temperature: z.number().min(0).max(2).optional(),
   maxIterations: z.number().int().min(1).max(15).default(6),
 });
 
@@ -30,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { input, tools, model, maxIterations } = parsed.data;
+  const { input, tools, model, systemPrompt, temperature, maxIterations } = parsed.data;
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || apiKey.startsWith("sk-your")) {
@@ -56,19 +62,30 @@ export async function POST(req: NextRequest) {
         const openaiTools = buildOpenAITools(tools);
 
         const messages: Array<{ role: string; content: string; tool_calls?: unknown[]; tool_call_id?: string; name?: string }> = [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt?.trim() || SYSTEM_PROMPT },
           { role: "user", content: input },
         ];
 
         let totalTokens = 0;
 
         for (let i = 0; i < maxIterations; i++) {
-          const response = await openai.chat.completions.create({
+          const requestBody = {
+            stream: false as const,
             model,
             messages: messages as Parameters<typeof openai.chat.completions.create>[0]["messages"],
-            tools: openaiTools.length > 0 ? openaiTools : undefined,
+            tools: openaiTools.length > 0
+              ? openaiTools as Parameters<typeof openai.chat.completions.create>[0]["tools"]
+              : undefined,
             tool_choice: openaiTools.length > 0 ? "auto" : undefined,
-          });
+            max_completion_tokens: 4_096,
+            ...(temperature === undefined ? {} : { temperature }),
+            ...(model === DEFAULT_OPENAI_MODEL
+              ? { service_tier: OPENAI_FAST_SERVICE_TIER, reasoning_effort: "none" }
+              : model === "gpt-6-sol"
+                ? { reasoning_effort: "none" }
+              : {}),
+          } as unknown as Parameters<typeof openai.chat.completions.create>[0];
+          const response = await openai.chat.completions.create(requestBody) as unknown as ChatCompletion;
 
           const choice = response.choices[0];
           totalTokens += response.usage?.total_tokens ?? 0;

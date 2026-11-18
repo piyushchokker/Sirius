@@ -4,8 +4,13 @@ import { useState } from "react";
 import { Send, Settings2, RotateCcw, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { DEFAULT_OPENAI_MODEL } from "@/lib/ai-models";
 
 const MODELS = [
+  { label: "GPT-6 Luna · Fast", value: "gpt-6-luna", provider: "openai" },
+  { label: "GPT-6 Sol", value: "gpt-6-sol", provider: "openai" },
+  { label: "GPT-4.1", value: "gpt-4.1", provider: "openai" },
+  { label: "GPT-4.1 mini", value: "gpt-4.1-mini", provider: "openai" },
   { label: "GPT-4o mini", value: "gpt-4o-mini", provider: "openai" },
   { label: "GPT-4o", value: "gpt-4o", provider: "openai" },
   { label: "Claude 3.5 Sonnet", value: "claude-3-5-sonnet-20241022", provider: "anthropic" },
@@ -20,7 +25,7 @@ export default function PlaygroundPage() {
   const [userPrompt, setUserPrompt] = useState("");
   const [response, setResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState(MODELS.find((model) => model.value === DEFAULT_OPENAI_MODEL)!);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(1024);
   const [copied, setCopied] = useState(false);
@@ -34,7 +39,7 @@ export default function PlaygroundPage() {
     setTokensUsed(null);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/playground", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -56,18 +61,8 @@ export default function PlaygroundPage() {
       while (reader) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        // AI SDK data stream format
-        const lines = chunk.split("\n").filter(Boolean);
-        for (const line of lines) {
-          if (line.startsWith("0:")) {
-            try {
-              const text = JSON.parse(line.slice(2));
-              full += text;
-              setResponse(full);
-            } catch {}
-          }
-        }
+        full += decoder.decode(value, { stream: true });
+        setResponse(full);
       }
     } catch (err) {
       setResponse(`Error: ${(err as Error).message}`);

@@ -75,6 +75,25 @@ def decode_token(token: str) -> dict:
         raise ValueError(f"Invalid token: {e}") from e
 
 
+def decode_web_bridge_token(token: str) -> dict:
+    """Decode a short-lived JWT issued by the authenticated Next.js web app."""
+    if not settings.WEB_API_BRIDGE_SECRET:
+        raise ValueError("Web API bridge is not configured")
+    try:
+        payload = jwt.decode(
+            token,
+            settings.WEB_API_BRIDGE_SECRET,
+            algorithms=["HS256"],
+            audience="ai-saas-api",
+            issuer="ai-saas-web",
+        )
+    except JWTError as e:
+        raise ValueError(f"Invalid web bridge token: {e}") from e
+    if payload.get("token_use") != "web-api-bridge":
+        raise ValueError("Invalid web bridge token type")
+    return payload
+
+
 # ─── API Keys ─────────────────────────────────────────────────────────────────
 
 def generate_api_key() -> tuple[str, str, str]:

@@ -30,6 +30,8 @@ class AIService:
         system_prompt: str | None = None,
         temperature: float | None = 0.7,
         max_tokens: int | None = None,
+        service_tier: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncGenerator[dict, None]:
         if provider == "anthropic":
             async for chunk in self._stream_anthropic(
@@ -43,7 +45,7 @@ class AIService:
                 yield chunk
         else:
             async for chunk in self._stream_openai(
-                messages, model, system_prompt, temperature, max_tokens
+                messages, model, system_prompt, temperature, max_tokens, service_tier, reasoning_effort
             ):
                 yield chunk
 
@@ -54,20 +56,30 @@ class AIService:
         system_prompt: str | None,
         temperature: float | None,
         max_tokens: int | None,
+        service_tier: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncGenerator[dict, None]:
         full_messages = []
         if system_prompt:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
 
-        stream = await self.openai_client.chat.completions.create(
-            model=model,
-            messages=full_messages,
-            temperature=temperature or 0.7,
-            max_tokens=max_tokens,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
+        newer_model_tokens = model.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
+        extra_body = {**({"service_tier": service_tier} if service_tier else {}), **({"reasoning_effort": reasoning_effort} if reasoning_effort else {})}
+        if newer_model_tokens and max_tokens:
+            extra_body["max_completion_tokens"] = max_tokens
+
+        request_args = {
+            "model": model,
+            "messages": full_messages,
+            "temperature": temperature or 0.7,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "extra_body": extra_body,
+        }
+        if not newer_model_tokens:
+            request_args["max_tokens"] = max_tokens
+        stream = await self.openai_client.chat.completions.create(**request_args)
 
         usage = {}
         async for event in stream:

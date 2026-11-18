@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.core.security import decode_token, hash_api_key
+from app.core.security import decode_token, decode_web_bridge_token, hash_api_key
 from app.models.user import User, UserRole
 from app.models.api_key import ApiKey, ApiKeyStatus
 
@@ -29,20 +29,22 @@ async def get_current_user(
 
     token = credentials.credentials
 
-    # Try JWT first
-    try:
-        payload = decode_token(token)
+    # Accept the API's own JWTs and short-lived tokens issued by the web BFF.
+    for decoder in (decode_token, decode_web_bridge_token):
+        try:
+            payload = decoder(token)
+        except ValueError:
+            continue
+
         user_id = payload.get("sub")
         if not user_id:
-            raise ValueError("Missing sub claim")
+            continue
 
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
-        if not user or user.deleted_at:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-        return user
-    except ValueError:
-        pass
+        if user and not user.deleted_at:
+            return user
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     # Try API key
     key_hash = hash_api_key(token)

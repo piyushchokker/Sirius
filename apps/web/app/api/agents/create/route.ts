@@ -2,12 +2,15 @@ import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@ai-saas/database";
 import { z } from "zod";
+import { AGENT_MODELS, DEFAULT_OPENAI_MODEL } from "@/lib/ai-models";
 
 const schema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   systemPrompt: z.string().max(4000).optional(),
-  model: z.string().default("gpt-4o-mini"),
+  model: z.string().trim().min(1).max(100)
+    .default(DEFAULT_OPENAI_MODEL)
+    .refine((model) => AGENT_MODELS.some((candidate) => candidate.value === model), "Unsupported agent model"),
   tools: z.array(z.string()).default([]),
   maxIterations: z.number().int().min(1).max(20).default(6),
   temperature: z.number().min(0).max(2).default(0.7),

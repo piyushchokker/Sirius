@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
 from functools import lru_cache
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 class Settings(BaseSettings):
@@ -20,7 +21,11 @@ class Settings(BaseSettings):
     # ─── Server ───────────────────────────────────────────────────────────────
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: str = "http://localhost:3000"
+
+    @property
+    def cors_origins(self) -> List[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     @property
     def is_production(self) -> bool:
@@ -36,9 +41,20 @@ class Settings(BaseSettings):
         url = self.DATABASE_URL
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        if "?schema=" in url:
-            url = url.split("?")[0]
-        return url
+        parsed = urlsplit(url)
+        query = parse_qsl(parsed.query, keep_blank_values=True)
+        asyncpg_query = []
+        sslmode = None
+        for key, value in query:
+            if key in {"schema", "pgbouncer", "connection_limit"}:
+                continue
+            if key == "sslmode":
+                sslmode = value
+                continue
+            asyncpg_query.append((key, value))
+        if sslmode:
+            asyncpg_query.append(("ssl", sslmode))
+        return urlunsplit(parsed._replace(query=urlencode(asyncpg_query)))
 
     # ─── Redis ────────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379"
@@ -48,6 +64,8 @@ class Settings(BaseSettings):
     API_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     API_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
+    WEB_API_BRIDGE_SECRET: Optional[str] = None
+    SUPABASE_URL: Optional[str] = None
 
     # ─── AI Providers ─────────────────────────────────────────────────────────
     OPENAI_API_KEY: Optional[str] = None

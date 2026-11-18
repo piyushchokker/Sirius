@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { AgentStepCard } from "@/components/chat/agent-mode-panel";
 import type { AgentStep } from "@/components/chat/agent-mode-panel";
+import { AGENT_MODELS, DEFAULT_OPENAI_MODEL } from "@/lib/ai-models";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -42,12 +43,7 @@ interface AgentWorkflow {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MODELS = [
-  { value: "gpt-4o-mini", label: "GPT-4o mini (Fast)" },
-  { value: "gpt-4o", label: "GPT-4o (Powerful)" },
-  { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-  { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-];
+const MODELS = AGENT_MODELS;
 
 const TOOLS = [
   { id: "web_search", label: "Web Search", icon: Globe, description: "Search the internet for current information" },
@@ -62,7 +58,7 @@ const TEMPLATES = [
     icon: "🔍",
     tools: ["web_search"],
     systemPrompt: "You are a research assistant. Search the web for relevant information and synthesize it into a clear, well-structured report with key findings and sources.",
-    model: "gpt-4o-mini",
+    model: DEFAULT_OPENAI_MODEL,
     href: "/agents/templates/research",
   },
   {
@@ -71,7 +67,7 @@ const TEMPLATES = [
     icon: "📊",
     tools: ["calculator", "code_executor"],
     systemPrompt: "You are a data analyst. Perform calculations, write analysis code, and provide clear insights with numbers and visualizations.",
-    model: "gpt-4o",
+    model: "gpt-6-sol",
     href: null,
   },
   {
@@ -80,7 +76,7 @@ const TEMPLATES = [
     icon: "🛡️",
     tools: ["code_executor", "web_search"],
     systemPrompt: "You are an expert code reviewer. Analyze code for bugs, security vulnerabilities, performance issues, and style problems. Provide specific, actionable feedback.",
-    model: "gpt-4o",
+    model: "gpt-6-sol",
     href: null,
   },
   {
@@ -89,7 +85,7 @@ const TEMPLATES = [
     icon: "✍️",
     tools: ["web_search"],
     systemPrompt: "You are a professional content writer. Research the topic thoroughly and craft engaging, accurate, and well-structured content.",
-    model: "gpt-4o-mini",
+    model: DEFAULT_OPENAI_MODEL,
     href: null,
   },
 ];
@@ -341,7 +337,7 @@ function AgentCard({
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="px-2 py-0.5 rounded-full bg-muted font-mono">
-            {agent.definition?.model ?? "gpt-4o-mini"}
+            {agent.definition?.model ?? DEFAULT_OPENAI_MODEL}
           </span>
           <span>·</span>
           <span>{agent._count.runs} runs</span>
@@ -558,7 +554,7 @@ function CreateAgentDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("You are a helpful AI assistant.");
-  const [model, setModel] = useState("gpt-4o-mini");
+  const [model, setModel] = useState<string>(DEFAULT_OPENAI_MODEL);
   const [tools, setTools] = useState<Set<string>>(new Set(["web_search"]));
   const [maxIterations, setMaxIterations] = useState(6);
   const [temperature, setTemperature] = useState(0.7);
@@ -756,7 +752,9 @@ function RunAgentDialog({ agent, onClose }: { agent: AgentWorkflow; onClose: () 
         body: JSON.stringify({
           input,
           tools: agent.enabledTools,
-          model: agent.definition?.model ?? "gpt-4o-mini",
+          model: agent.definition?.model ?? DEFAULT_OPENAI_MODEL,
+          systemPrompt: agent.definition?.systemPrompt,
+          temperature: agent.definition?.temperature,
           maxIterations: agent.definition?.maxIterations ?? 6,
         }),
       });
@@ -936,7 +934,7 @@ async function simulateAgent(
 function AgentModeRunnerTab() {
   const [input, setInput] = useState("");
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set(["web_search"]));
-  const [selectedModel, setSelectedModel] = useState("gpt-4o-mini");
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_OPENAI_MODEL);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentResult, setAgentResult] = useState<string | null>(null);
